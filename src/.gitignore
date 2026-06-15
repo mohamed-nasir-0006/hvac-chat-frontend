@@ -1,0 +1,8 @@
+cat > hvac-chat-frontend/.gitignore << 'EOF'
+node_modules/
+dist/
+.env
+.env.production
+.vscode/
+.DS_Store
+EOF
