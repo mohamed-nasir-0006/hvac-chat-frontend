@@ -38,8 +38,9 @@ const navStyles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     padding: "0.8rem 2rem",
-    backgroundColor: "#16213e",
+    backgroundColor: "rgba(22, 33, 62, 0.95)",
     borderBottom: "1px solid #0f3460",
+    backdropFilter: "blur(10px)", 
   },
   logo: {
     fontSize: "1.2rem",

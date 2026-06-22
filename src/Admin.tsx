@@ -348,7 +348,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "'Segoe UI', sans-serif",
     color: "#e0e0e0",
     minHeight: "100vh",
-    backgroundColor: "#1a1a2e",
+    backgroundColor: "transparent",
   },
   heading: {
     textAlign: "center",
@@ -357,7 +357,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#ffffff",
   },
   section: {
-    backgroundColor: "#16213e",
+    backgroundColor: "rgba(22, 33, 62, 0.9)",
     borderRadius: 12,
     padding: "1.5rem",
     marginBottom: "1.5rem",
