@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
+
 import {
-  sendChatMessage,
+  streamChatMessage,
   listSessions,
   getSessionMessages,
   deleteSession,
@@ -12,6 +13,7 @@ import {
 type Message = {
   role: "user" | "assistant";
   text: string;
+  rawJson?: string;
   parsed?: ParsedIntent | null;
 };
 
@@ -25,7 +27,7 @@ const Chat: React.FC = () => {
   // Session state
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -80,30 +82,68 @@ const Chat: React.FC = () => {
     loadSessions();
   };
 
-  const sendMessage = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || loading) return;
+const sendMessage = async () => {
+  const trimmed = input.trim();
+  if (!trimmed || loading) return;
 
-    const userMsg: Message = { role: "user", text: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setLoading(true);
+  const userMsg: Message = { role: "user", text: trimmed };
+  setMessages((prev) => [...prev, userMsg]);
+  setInput("");
+  setLoading(true);
 
-    const res = await sendChatMessage(trimmed, history, sessionId || undefined);
-    setHistory(res.history);
-    setSessionId(res.session_id);
+  // Add empty assistant message for streaming
+  setMessages((prev) => [
+    ...prev,
+    { role: "assistant", text: "", rawJson: "", parsed: null },
+  ]);
 
-    const botMsg: Message = {
-      role: "assistant",
-      text: res.reply,
-      parsed: res.parsed,
-    };
-    setMessages((prev) => [...prev, botMsg]);
-    setLoading(false);
+  await streamChatMessage(
+    trimmed,
+    history,
+    sessionId,
 
-    // Refresh session list
-    loadSessions();
-  };
+    // onToken — raw JSON tokens streaming in
+    (token: string) => {
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {
+          updated[updated.length - 1] = {
+            ...lastMsg,
+            rawJson: (lastMsg.rawJson || "") + token,  // ← Collect raw JSON
+          };
+        }
+        return updated;
+      });
+    },
+
+    // onDone — replace with human reply, attach parsed intent
+    (parsed: ParsedIntent | null, newSessionId: string, reply: string | null) => {
+      setSessionId(newSessionId);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {
+          updated[updated.length - 1] = {
+            ...lastMsg,
+            text: reply || lastMsg.rawJson || "",  // ← Show human reply
+            parsed: parsed,
+          };
+        }
+        return updated;
+      });
+
+      setHistory((prev) => [
+        ...prev,
+        { role: "user", content: trimmed },
+        { role: "assistant", content: reply || "" },
+      ]);
+    }
+  );
+
+  setLoading(false);
+  loadSessions();
+};
 
   const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
     if (e.key === "Enter") {
@@ -169,9 +209,9 @@ const Chat: React.FC = () => {
               onClick={() => setShowSidebar(!showSidebar)}
               style={styles.menuBtn}
             >
-              ☰
+              ❄️ History
             </button>
-            <h2 style={styles.title}>❄️ HVAC AI Assistant</h2>
+            <h2 style={styles.title}></h2>
           </div>
           <label style={styles.debugLabel}>
             <input
@@ -179,7 +219,7 @@ const Chat: React.FC = () => {
               checked={showDebug}
               onChange={(e) => setShowDebug(e.target.checked)}
             />
-            Show parsed intent
+            Developer Chat
           </label>
         </div>
 
@@ -196,37 +236,52 @@ const Chat: React.FC = () => {
           )}
 
           {messages.map((m, i) => (
-            <div key={i}>
-              <div
-                style={{
-                  margin: "8px 0",
-                  display: "flex",
-                  justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    ...styles.bubble,
-                    ...(m.role === "user" ? styles.userBubble : styles.botBubble),
-                  }}
-                >
-                  {m.text}
-                </div>
-              </div>
-
-              {showDebug && m.role === "assistant" && m.parsed && (
-                <div style={styles.debugBox}>
-                  <strong>Parsed Intent:</strong>
-                  <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{
+                ...styles.bubble,
+                ...(m.role === "user" ? styles.userBubble : styles.botBubble),
+              }}>
+                {/* Show raw JSON while streaming (Developer Chat ON) OR human reply when done */}
+                {m.role === "assistant" && showDebug && m.rawJson && !m.text ? (
+                  // Still streaming — show raw JSON
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: "0.85rem" }}>
+                    {m.rawJson}
+                  </pre>
+                ) : (
+                  // Done — show human reply
+                  m.text
+                )}
+                {/* Blinking cursor while streaming */}
+                {loading && m.role === "assistant" && i === messages.length - 1 && !m.text && (
+                  <span style={{
+                    display: "inline-block",
+                    width: 2,
+                    height: "1em",
+                    backgroundColor: "#e94560",
+                    marginLeft: 2,
+                    animation: "blink 0.7s infinite",
+                    verticalAlign: "text-bottom",
+                  }} />
+                )}
+                
+                {showDebug && m.parsed && m.text && (
+                  <pre style={{
+                    marginTop: 8,
+                    padding: 8,
+                    backgroundColor: "rgba(0,0,0,0.3)",
+                    borderRadius: 6,
+                    fontSize: "0.8rem",
+                    whiteSpace: "pre-wrap",
+                  }}>
                     {JSON.stringify(m.parsed, null, 2)}
                   </pre>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ))}
 
-          {loading && (
-            <div style={styles.thinking}>● ● ● Sunny is Thinking...</div>
+          {loading && messages[messages.length - 1]?.text === "" && (
+            <div style={styles.thinking}>● ● ● Thinking...</div>
           )}
 
           <div ref={messagesEndRef} />
@@ -298,7 +353,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     border: "1px dashed #0f3460",
     backgroundColor: "transparent",
-    color: "#e94560",
+    color: "#06e5c0e3",
     cursor: "pointer",
     fontSize: "0.85rem",
     fontWeight: 600,
@@ -374,21 +429,24 @@ const styles: Record<string, React.CSSProperties> = {
   },
   menuBtn: {
     background: "rgba(15, 20, 40, 0.95)",
-    border: "1px solid #f04b0aff",
-    color: "#f92b0bff",
+    color: "#06e5c0e3",
     fontSize: "1.2rem",
     padding: "0.3rem 0.6rem",
     borderRadius: 6,
     cursor: "pointer",
   },
   title: {
+    background: "rgba(137, 139, 147, 0.95)",
     margin: 0,
     fontSize: "1.4rem",
-    color: "#f54708ff",
+    color: "#090301ff",
   },
   debugLabel: {
+    background: "rgba(15, 20, 40, 0.95)",
+    padding: "0.1rem 0.3rem",
+    borderRadius: 6,
     fontSize: "0.75rem",
-    color: "#062574ff",
+    color: "#06e5c0e3",
     display: "flex",
     alignItems: "center",
     gap: "0.3rem",

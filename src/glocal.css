@@ -14,18 +14,6 @@ body {
   font-family: "Segoe UI", sans-serif;
 }
 
-/* Dark overlay so text is readable */
-/* body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(243, 245, 246, 0.85);
-  z-index: -1;
-} */
-
 /* Scrollbar styling (optional, looks nice) */
 ::-webkit-scrollbar {
   width: 8px;
@@ -42,4 +30,10 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #e94560;
+}
+
+/* Blinking cursor for streaming */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
